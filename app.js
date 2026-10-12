@@ -85,14 +85,19 @@ async function startServer() {
   try {
     await connectDB();
 
-    const server = createHttpsServer(app);
-    const PORT = process.env.PORT || 5000;
+ const PORT = process.env.PORT || 5000;
 
-    server.listen(PORT, () => {
-      console.log(`HTTPS Server running on port ${PORT}`);
-      console.log("HustleHub+ backend is ready!");
-    });
+// Render handles HTTPS automatically in production.
+// Keep HTTPS for local development.
+const server =
+  process.env.NODE_ENV === "production"
+    ? app
+    : createHttpsServer(app);
 
+server.listen(PORT, () => {
+  console.log(`HustleHub+ backend running on port ${PORT}`);
+  console.log("HustleHub+ backend is ready!");
+});
     server.on("error", (error) => {
       console.error("HTTPS server error:", error.message);
     });
