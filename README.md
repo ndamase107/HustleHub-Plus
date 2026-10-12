@@ -1,25 +1,309 @@
-# HustleHub+ — Secure Backend Foundations
+# HustleHub+ — Part 2: Secure Freelance Marketplace
 
-## 1. System Overview and Purpose
+**Module:** INSY7314  
+**Project:** HustleHub+  
+**Technology:** MongoDB, Express.js, React, Node.js (MERN)  
+**Project stage:** Part 2 — marketplace functionality, role-based access control, API security and testing
 
-HustleHub+ is a secure freelance marketplace platform designed to connect Clients with Freelancers who advertise services through the platform. The broader system is intended to allow Clients to browse and book freelance services while enabling Freelancers to manage their gigs, record income generated from bookings, view financial information, and receive an indication of estimated tax obligations. Administrators will provide platform-level management and oversight. This submission represents **Part 1: Secure Backend Foundations**, which establishes the security-focused backend upon which the remaining functionality will be developed. The backend has been implemented using **Node.js and Express**, following a modular architecture that separates application responsibilities into routes, controllers, middleware, services, storage, and utility components. Node.js was selected because it provides an efficient runtime for building API-driven applications, while Express provides a lightweight and flexible framework for handling HTTP requests, routing, middleware, validation, and error handling. The intended final system follows the MERN architecture, consisting of a React frontend, an Express and Node.js backend, and MongoDB as the eventual database layer. For Part 1, persistent database functionality is intentionally deferred because the assessment permits local in-memory or file-based storage at this stage. A JSON file is therefore used as temporary storage for registered users. This approach allows authentication and security controls to be implemented and tested independently before the database layer is introduced in Part 2. The architecture has been deliberately designed to be extensible so that the temporary storage implementation can later be replaced by MongoDB without requiring the entire application to be rewritten.
+## 1. Project Overview
 
-## 2. Backend Architecture and Separation of Responsibilities
+HustleHub+ is a web-based freelance marketplace connecting **Clients** who need services with **Freelancers** who offer them. Clients can browse gigs, request bookings and make **simulated** payments. Freelancers can publish and manage gigs, accept bookings, complete paid work and view earnings. The platform integrates a React frontend with a REST API and MongoDB persistence.
 
-The backend follows a layered and modular structure to improve maintainability, security, readability, and future scalability. The `app.js` file acts as the main application entry point and is responsible for configuring Express, registering global middleware, loading environment variables, connecting application routes, and starting the HTTPS server. The `routes` layer defines the available API endpoints and determines which controller should process each request. For example, authentication requests are handled through `/api/auth/register` and `/api/auth/login`. The `controllers` layer contains the business logic associated with those endpoints, meaning that HTTP request handling is separated from the application's storage and infrastructure concerns. The `services` layer manages interaction with the current user storage mechanism, including reading and writing user information to the JSON file. This separation is important because it reduces coupling between the API and the underlying storage implementation and makes it easier to replace file-based storage with MongoDB in a later stage. The `middleware` layer contains reusable security and application-processing components, including JWT authentication and centralized error handling. The `utils` layer contains reusable infrastructure functionality such as HTTPS server configuration. This architecture was selected instead of placing all functionality inside a single JavaScript file because a monolithic structure becomes difficult to maintain and increases the risk of security and implementation errors as functionality grows. A modular structure also supports the incremental development approach required by the POE: Part 1 establishes authentication and security foundations, Part 2 can add gigs, bookings, transactions, income tracking and the frontend, and Part 3 can extend the system with DevSecOps, monitoring, automated testing, containerisation and CI/CD without fundamentally restructuring the existing backend.
+Part 2 extends the Part 1 authentication foundation into a working marketplace. It replaces the initial JSON-file-based user storage approach with MongoDB-backed application models, introduces gig, booking and transaction workflows, adds role and resource-ownership checks, and supplies automated backend security tests. **Payments are simulated; no real money is processed.**
 
-## 3. Request Flow, Authentication and JWT Token Usage
+## 2. Main Features and User Roles
 
-A request begins when a client application such as Postman or the future React frontend sends an HTTPS request to the HustleHub+ API. The request first passes through Express middleware responsible for security and request processing. Security-related middleware such as **Helmet** adds appropriate HTTP security headers, while CORS controls cross-origin access and Morgan provides request logging for development and troubleshooting. JSON request bodies are parsed by Express before the appropriate API route is reached. For registration, the request is sent to `POST /api/auth/register`, where the route applies validation rules before the controller processes the information. The validation layer checks that required fields are present, that the supplied email has a valid format, that the password meets the minimum length requirement, and that the selected role belongs to the permitted set of `Client`, `Freelancer`, or `Admin`. If validation succeeds, the controller checks whether the email address already exists. Duplicate users are rejected rather than creating multiple accounts with the same identity. The supplied password is then passed through bcrypt and converted into a one-way password hash before the user is stored. The original plaintext password is not retained in the storage file. For login, the client sends credentials to `POST /api/auth/login`. The backend locates the account using the supplied email and compares the supplied password against the stored bcrypt hash using a secure password comparison operation. If authentication succeeds, the server generates a **JSON Web Token (JWT)** containing the authenticated user's unique ID and role. The token is signed using a secret stored in an environment variable rather than being hard-coded into the source code, and it has a limited lifetime of one hour. This token provides a stateless mechanism for identifying an authenticated user on subsequent protected requests. A protected endpoint can require the client to provide the token in the HTTP `Authorization` header using the `Bearer <token>` format. The authentication middleware extracts the token, verifies its signature and expiration using the server's JWT secret, and places the decoded user information into the request object. If the token is missing, invalid, expired, or manipulated, the request is rejected with HTTP `401 Unauthorized`. Including the user ID and role in the JWT prepares the application for role-based authorization in later stages, where different permissions can be applied to Clients, Freelancers, and Administrators.
+| Area | Client | Freelancer |
+| --- | --- | --- |
+| Account | Register, log in and access own account | Register, log in and access own account |
+| Marketplace | Browse available gigs | Create, update and remove own gigs |
+| Bookings | Request and view own bookings; cancel eligible bookings | View and accept bookings for own gigs; complete eligible bookings |
+| Transactions | Simulate payment for an eligible accepted booking; view own transactions | View relevant transactions and earnings |
+| Access control | Cannot publish gigs or accept freelancer bookings | Cannot create client bookings or make client payments |
 
-## 4. Input Validation and Secure Error Handling
+The user model includes an `Admin` role, but **an administrator dashboard and full admin management capabilities are not documented as completed Part 2 features**. Authorization must be checked on the backend even if the React interface hides restricted actions.
 
-Input validation is treated as a fundamental security control rather than simply a method of improving user experience. All user-controlled input must be validated before it is processed by the application. HustleHub+ uses the `express-validator` library to implement server-side validation because client-side validation alone cannot be trusted: a malicious user can bypass a frontend completely and send requests directly to the API. Registration requests therefore require a non-empty name, a correctly formatted email address, a password meeting the minimum length requirement, and a role that matches one of the explicitly permitted values. Login requests require a valid email address and a supplied password. Input is also trimmed where appropriate to reduce accidental whitespace and improve consistency. Invalid requests are rejected with an HTTP `400 Bad Request` response and a controlled JSON structure containing validation information. Duplicate accounts return HTTP `409 Conflict`, while authentication failures return HTTP `401 Unauthorized`. The application also implements centralized error handling so unexpected errors are handled consistently rather than exposing implementation details to API consumers. Internal information such as stack traces, server file paths, environment variables, database details, cryptographic secrets, and other configuration information must never be returned in API responses because such information could assist an attacker in understanding or exploiting the application. Instead, the API provides controlled messages such as `Internal server error`. The use of consistent response structures with fields such as `success`, `message`, and validation information makes the API easier for the future React frontend to consume and provides predictable behaviour for automated API testing. These controls provide defence against common problems such as malformed requests, missing input, invalid data, duplicate accounts, credential abuse, and accidental disclosure of internal implementation details.
+## 3. System Architecture
 
-## 5. Password Security, HTTPS and Additional Security Controls
+The application follows the MERN architecture:
 
-Password protection is implemented using **bcrypt**, a password-hashing algorithm specifically designed for securely storing passwords. Passwords are never stored as plaintext because a database or storage compromise could otherwise expose every user's credentials immediately. During registration, bcrypt generates a salted password hash using a computationally expensive hashing process with twelve salt rounds. During authentication, the plaintext password supplied by the user is compared against the stored hash using bcrypt's verification mechanism; the original password cannot be recovered from the stored hash. JWT authentication complements password hashing by avoiding the need for the user to transmit their password on every authenticated request. The JWT secret is stored in the `.env` configuration file and is excluded from version control through `.gitignore`, preventing sensitive configuration from being committed to the public GitHub repository. The application also uses **HTTPS** through a locally configured SSL/TLS certificate. The HTTPS server loads a private key and certificate and serves the API over `https://localhost:5000`. HTTPS is important because authentication credentials, JWTs, and other sensitive information must be protected while travelling between the client and server. Without encryption, an attacker positioned between the client and API could potentially intercept credentials or authentication tokens. The local certificate used for development may cause a browser or Postman certificate warning because it is not issued by a publicly trusted certificate authority; this is expected in a local development environment. The application also uses Helmet to provide security-related HTTP headers, CORS to control cross-origin requests, and environment variables for configuration values that should not be embedded directly into application source code. Together, these controls demonstrate a defence-in-depth approach in which security is implemented at multiple layers rather than relying on a single mechanism. In a production deployment, the local development certificate would be replaced with a certificate issued by a trusted certificate authority, stronger secret-management practices would be used, and HTTPS would remain mandatory.
+```text
+React frontend (Vite)
+       |
+       | HTTPS REST API requests + Bearer JWT
+       v
+Node.js / Express backend
+       |
+       +-- Security middleware (Helmet, CORS, JSON size limit)
+       +-- Authentication and authorization middleware
+       +-- API routes and controllers
+       +-- Centralized error handling
+       |
+       v
+Mongoose models
+       |
+       v
+MongoDB (users, gigs, bookings, transactions)
+```
 
-## 6. Testing, API Behaviour and Future Development
+The backend separates concerns into `routes/` (endpoint definitions), `controllers/` (business rules), `middleware/` (authentication, authorization and error handling), `models/` (MongoDB schemas), `config/` (database configuration) and `utils/` (supporting infrastructure). `app.js` configures the Express application and HTTPS startup. It also exports the Express app for automated testing without starting the server or connecting to the live database.
 
-The Part 1 backend is tested using **Postman** to demonstrate both successful and unsuccessful authentication scenarios. The Postman collection contains requests for successful user registration, successful login and JWT generation, duplicate-user registration, invalid login credentials, and invalid or missing input. Testing negative scenarios is important because a secure API must not only demonstrate that valid requests work; it must also demonstrate that invalid and potentially malicious requests are rejected safely and consistently. A successful registration demonstrates that a valid user can be created without storing the plaintext password, while a successful login demonstrates that the stored password hash can be verified and that a signed JWT containing the user's ID and role is generated. Duplicate registration demonstrates that the API prevents conflicting accounts, while invalid-login testing demonstrates that authentication failures do not reveal whether a password or account detail was incorrect beyond the controlled `Invalid credentials` response. Validation testing demonstrates that malformed requests are rejected before they reach the business logic. HTTPS is also demonstrated by executing the API through `https://localhost:5000` rather than unencrypted HTTP. The repository contains the source code, configuration structure, storage mechanism, SSL configuration, Postman collection, and this README. The implementation intentionally provides the foundation for the subsequent POE parts rather than attempting to implement every final platform feature in Part 1. In Part 2, the architecture can be extended with MongoDB persistence, React frontend integration, role-based access control, Freelancer gig management, Client bookings, simulated transactions, income calculations, estimated tax calculations, and financial dashboards. Part 3 can then introduce containerisation, automated backend and frontend unit tests, automated API endpoint testing, security scanning, CI/CD through GitHub Actions, monitoring and production-readiness improvements. This incremental approach ensures that each stage builds upon the previous stage while preserving the security principles established in Part 1. The resulting foundation provides a clear separation of responsibilities, secure authentication, protected credentials, validated input, encrypted communication, controlled error responses, and an extensible architecture suitable for developing the complete HustleHub+ MERN platform.
+### Representative project structure
+
+```text
+ST10439938_INSY7314/
+├── app.js
+├── package.json
+├── .env                       # Local configuration; do not commit
+├── .gitignore
+├── config/                   # Database configuration
+├── controllers/
+│   ├── authController.js
+│   ├── gigController.js
+│   ├── bookingController.js
+│   └── transactionController.js
+├── middleware/
+│   ├── authMiddleware.js
+│   ├── authorize.js
+│   └── errorMiddleware.js
+├── models/                   # Mongoose schemas
+├── routes/
+│   ├── authRoutes.js
+│   ├── gigRoutes.js
+│   ├── bookingRoutes.js
+│   └── transactionRoutes.js
+├── tests/
+│   ├── security.test.js
+│   ├── roles.test.js
+│   ├── bookingSecurity.test.js
+│   ├── validation.test.js
+│   └── cors.test.js
+├── frontend/                 # React/Vite application
+├── ssl/                      # Local development certificates; do not commit
+└── README.md
+```
+
+## 4. Installation and Local Setup
+
+### Prerequisites
+
+- Node.js and npm
+- A running MongoDB instance or an accessible MongoDB connection string
+- VS Code or another code editor
+- A modern browser
+- Development HTTPS certificate and private key in the locations expected by `utils/https.js`
+
+### Backend
+
+From the repository root:
+
+```powershell
+npm install
+```
+
+Create a local `.env` file and supply the values expected by the application. Example **variable names** (not real credentials):
+
+```dotenv
+PORT=5000
+MONGO_URI=mongodb://127.0.0.1:27017/hustlehub
+JWT_SECRET=replace_with_a_long_random_secret
+# Optional, when the frontend is hosted on a different origin:
+# FRONTEND_URL=https://your-frontend-domain.example
+```
+
+> Confirm the MongoDB variable name against the current database configuration if it differs from `MONGO_URI`. Never commit `.env`, private keys or real credentials. The example above is for local development, not production configuration.
+
+Start the backend:
+
+```powershell
+npm start
+```
+
+The development backend uses HTTPS on port `5000` when configured as above. A self-signed development certificate may produce a browser or API-client trust warning; do not disable certificate verification in production.
+
+### Frontend
+
+Open another terminal:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Open the local URL shown by Vite (commonly `http://localhost:5173` or `http://localhost:5174`). The frontend must be configured to call the correct backend HTTPS URL. The backend's local CORS allowlist includes both of those development origins.
+
+## 5. API Reference
+
+Protected endpoints require:
+
+```http
+Authorization: Bearer <JWT_TOKEN>
+```
+
+### Authentication — `/api/auth`
+
+| Method | Endpoint | Access | Purpose |
+| --- | --- | --- | --- |
+| POST | `/api/auth/register` | Public | Register a new account |
+| POST | `/api/auth/login` | Public | Authenticate and obtain a JWT |
+| GET | `/api/auth/me` | Authenticated | Retrieve current account details |
+
+### Gigs — `/api/gigs`
+
+| Method | Endpoint | Access | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/gigs` | Public | Browse gigs |
+| POST | `/api/gigs` | Freelancer | Publish a gig |
+| PATCH | `/api/gigs/:id` | Owning Freelancer | Update a gig |
+| DELETE | `/api/gigs/:id` | Owning Freelancer | Remove a gig through the implemented soft-delete logic |
+
+### Bookings — `/api/bookings`
+
+| Method | Endpoint | Access | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/bookings/mine` | Client or Freelancer | View bookings relevant to the signed-in user |
+| POST | `/api/bookings` | Client | Create a booking |
+| PATCH | `/api/bookings/:id/accept` | Owning Freelancer | Accept a booking |
+| PATCH | `/api/bookings/:id/complete` | Owning Freelancer | Complete an eligible paid booking |
+| PATCH | `/api/bookings/:id/cancel` | Owning Client | Cancel an eligible booking |
+
+### Transactions — `/api/transactions`
+
+| Method | Endpoint | Access | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/transactions/mine` | Client or Freelancer | View relevant transactions |
+| GET | `/api/transactions/earnings` | Freelancer | View income information |
+| POST | `/api/transactions/pay/:bookingId` | Owning Client | Simulate payment for an accepted booking |
+
+**Note:** These are the routes established during Part 2 development. Request bodies, response fields and exact state transitions should be checked against the current route/controller code or a verified Postman collection before submission.
+
+## 6. End-to-End Workflow
+
+1. A **Freelancer** registers or logs in and publishes a gig.
+2. A **Client** registers or logs in, browses available gigs and creates a booking.
+3. The relevant Freelancer reviews and accepts the booking.
+4. The Client makes a **simulated payment** against the accepted booking.
+5. The Freelancer marks the eligible paid booking as completed.
+6. Each user views their relevant booking or transaction information; the Freelancer can view earnings.
+
+Booking updates are scoped to the appropriate owner and permitted state. The payment controller checks booking ownership and eligibility. A unique transaction constraint helps prevent recording a second simulated payment for the same booking. These checks are performed server-side rather than relying only on frontend controls.
+
+## 7. Security Design
+
+### Authentication and password protection
+
+- Passwords are hashed with **bcrypt** before storage, rather than saved in plaintext.
+- Successful login issues a signed **JWT** with a one-hour lifetime.
+- Protected endpoints validate the JWT and load the associated user from the database.
+- Requests with missing, invalid or expired credentials are rejected with **401 Unauthorized**.
+- The JWT signing secret is read from an environment variable rather than hard-coded in source control.
+
+### Role-based access control and ownership
+
+- The authorization middleware checks whether the authenticated account has the required `Client` or `Freelancer` role.
+- Incompatible roles receive **403 Forbidden** responses.
+- Sensitive gig and booking modifications are constrained to resources owned by the current user.
+- Transaction creation requires an eligible booking belonging to the paying Client.
+- Backend authorization remains mandatory even when a frontend control is hidden or disabled.
+
+### Validation and error handling
+
+- Authentication routes use **express-validator** for required fields, email format, password length and permitted registration roles.
+- The gig controller validates important gig fields, including text inputs and finite nonnegative pricing.
+- Email values are normalized where appropriate.
+- Invalid input is rejected with controlled **400 Bad Request** responses.
+- The centralized error middleware avoids returning raw internal stack traces to API consumers.
+- **Further validation and sanitisation review is recommended for all booking and transaction request fields.**
+
+### HTTP and API protections
+
+- **Helmet** supplies HTTP security headers. Its Content Security Policy configuration should be checked separately against the assessment's CSP requirements.
+- **CORS** permits the known local React origins and an optional configured frontend origin. CORS is a browser restriction, **not** a replacement for authentication or authorization.
+- Express limits JSON request bodies to **100 KB**.
+- Authentication routes include rate limiting of **20 requests per 15 minutes**. Booking-specific rate limiting must be verified separately before claiming it is implemented.
+- Local development uses HTTPS. Production deployment requires a properly trusted certificate and environment-specific configuration.
+- `.gitignore` excludes local secrets, certificates, dependencies, generated builds and `storage/users.json` from new Git tracking. Previously committed secrets or data are **not** erased from Git history by adding ignore rules.
+
+## 8. Automated Backend Testing
+
+Backend tests use **Jest** and **Supertest**. The Express app is imported directly for isolated request testing, without starting the production server. Model mocks are used where needed so tests do not alter live MongoDB data.
+
+Run from the repository root:
+
+```powershell
+npm test
+```
+
+### Part 2 test suites
+
+| File | Coverage |
+| --- | --- |
+| `tests/security.test.js` | Missing/invalid JWT and unauthenticated protected operations |
+| `tests/roles.test.js` | Rejection of actions attempted by the wrong user role |
+| `tests/bookingSecurity.test.js` | Booking ownership, payment eligibility and duplicate-payment protection |
+| `tests/validation.test.js` | Invalid registration and login inputs |
+| `tests/cors.test.js` | Approved origins, blocked-origin CORS headers and approved preflight requests |
+
+**Most recently verified local result:**
+
+```text
+Test Suites: 5 passed, 5 total
+Tests:       22 passed, 22 total
+```
+
+The expected `400`, `401`, `403` and `409` responses in these negative tests represent correctly rejected requests, not test failures. Automated tests demonstrate the behaviours covered by the test cases; they do not establish that every security risk has been eliminated.
+
+### Dependency audit
+
+```powershell
+npm audit
+npm audit --omit=dev
+```
+
+At the most recent check, `npm audit --omit=dev` reported **0 vulnerabilities** in production dependencies. The full audit reported **19 moderate development-dependency findings**, linked to the Jest tooling dependency tree. These findings remain for review; avoid `npm audit fix --force` without evaluating breaking changes.
+
+### Postman/Newman and frontend tests
+
+The rubric separately requires **Postman/Newman execution evidence** and **React frontend interaction tests**. The Jest/Supertest backend results above do **not** replace those deliverables. Add the verified Postman collection, Newman command/results and frontend test instructions to this section once they have been completed. Do not report them as passed without an actual run.
+
+## 9. Part 1 to Part 2 Changes
+
+| Part 1 foundation | Part 2 improvement |
+| --- | --- |
+| Express authentication API | Full marketplace API for gigs, bookings and transactions |
+| Temporary JSON-based user storage | MongoDB/Mongoose persistence |
+| JWT and bcrypt foundations | Database-backed authentication, RBAC and ownership checks |
+| Backend-focused project | React/Vite frontend integrated with API |
+| Basic security middleware | Restricted CORS, request-size limit and additional workflow checks |
+| Manual API exploration | Five automated backend suites, 22 passing tests |
+| No completed marketplace income flow | Simulated payment records and freelancer earnings views |
+
+## 10. Known Limitations and Future Improvements
+
+- **Payments are simulated** and must not be represented as real payment processing.
+- Admin account capabilities are not established as complete in the current Part 2 implementation.
+- Booking rate limiting, a specifically reviewed Content Security Policy and comprehensive input sanitisation still require verification against the marking rubric.
+- Postman/Newman evidence and automated React interaction tests must be added if they are required for final assessment.
+- Production hosting, operational monitoring, CI/CD and further hardening are outside the functionality verified in this document.
+- A full security assessment would include additional integration, authorization, abuse-case and dependency testing.
+
+## 11. Troubleshooting
+
+| Symptom | What to check |
+| --- | --- |
+| Frontend cannot reach API | Backend is running; frontend API base URL uses the correct HTTPS port; CORS origin is permitted |
+| MongoDB connection failure | Database service/connection string, network access and local `.env` values |
+| `401 Unauthorized` | JWT exists, is valid and is sent as `Authorization: Bearer <token>` |
+| `403 Forbidden` | Logged-in role has permission for the requested operation |
+| `409 Conflict` | Booking/payment state, resource ownership or duplicate transaction |
+| Self-signed HTTPS warning | Development certificate trust; do not bypass certificate checks in production |
+| Jest test hangs on `gigs.find()` | A test may be calling a database-dependent route without mocking the model or connecting to a test database |
+
+## 12. Submission Notes
+
+Before submitting, verify that the README matches the **latest source code**, include evidence for any required Newman and frontend tests, and confirm the repository contains no `.env` values, private keys, real user data or unintended generated files. Maintain accurate commit history and follow the course's collaboration and repository requirements.
+
+---
+
+**HustleHub+ Part 2 — MERN Freelance Marketplace**

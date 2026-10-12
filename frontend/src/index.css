@@ -1,0 +1,20 @@
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: "Segoe UI", Inter, Arial, sans-serif;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: #f7f8fc;
+  color: #18243b;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+}

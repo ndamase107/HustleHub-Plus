@@ -1,3 +1,37 @@
-node_modules
+
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Environment variables
 .env
-ssl
+.env.*
+!.env.example
+!.env.*.example
+
+# HTTPS certificates and private keys
+ssl/
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Frontend build output
+frontend/dist/
+dist/
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Editor settings
+.vscode/
+# Local user data
+storage/users.json
+
+storage/users.json
