@@ -436,8 +436,7 @@ For a future production deployment, set `NODE_ENV=production`, `MONGO_URI`, `JWT
 
 | Jest test hangs on `gigs.find()` | A test may be calling a database-dependent route without mocking the model or connecting to a test database |
 
-## 13. Submission Notes
-Before submitting, verify that the README matches the **latest source code**, include the completed Newman and frontend test evidence, and confirm the repository contains no `.env` values, private keys, real user data or unintended generated files. Maintain accurate commit history and follow the course's collaboration and repository requirements.
+
 
 **---**
 
